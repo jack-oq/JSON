@@ -2,34 +2,71 @@ import json
 from plotly.graph_objs import Scattergeo, Layout
 from plotly import offline
 
-infile = open('univ.json','r')
+univ_file = open('univ.json', 'r')
+univ_data = json.load(univ_file)
 
-outfile = open('readable_university_data.json','w')
-
-univ_data = json.load(infile)
+schools_file = open('schools.geojson', 'r')
+schools_data = json.load(schools_file)
 
 school_names = []
-school_addresses = []
 longitude_list = []
 latitude_list = []
+total_enrollment_list = []
 male_enrollments = []
 female_enrollments = []
 
-# Loop through each university's data in the JSON array
 for university in univ_data:
-    # Extract the information for each university
-    school_name = university.get("instnm")
-    school_address = university.get("Institution's internet website address (HD2020)")
-    longitude = university.get("Longitude location of institution (HD2020)")
-    latitude = university.get("Latitude location of institution (HD2020)")
-    male_enrollment = university.get("Graduation rate  men (DRVGR2020)")
-    female_enrollment = university.get("Graduation rate  women (DRVGR2020)")
+    if university.get("NCAA", {}).get("NAIA conference number football (IC2020)") == 108:
+        school_name = university.get("instnm")
+        longitude = university.get("Longitude location of institution (HD2020)")
+        latitude = university.get("Latitude location of institution (HD2020)")
+        women_percentage = university.get("Percent of total enrollment that are women (DRVEF2020)")
+        total_enrollment = university.get("Total  enrollment (DRVEF2020)")
+        women_enrollment = int(total_enrollment * (women_percentage / 100))
+        men_enrollment = total_enrollment - women_enrollment
 
-    # Append the extracted data to the corresponding lists
-    school_names.append(school_name)
-    school_addresses.append(school_address)
-    longitude_list.append(longitude)
-    latitude_list.append(latitude)
-    male_enrollments.append(male_enrollment)
-    female_enrollments.append(female_enrollment)
+        school_names.append(school_name)
+        longitude_list.append(longitude)
+        latitude_list.append(latitude)
+        total_enrollment_list.append(total_enrollment)
+        male_enrollments.append(men_enrollment)
+        female_enrollments.append(women_enrollment)
 
+school_addresses = []
+for feature in schools_data["features"]:
+    address = feature["properties"]["STREET"]
+    school_addresses.append(address)
+
+hover_text = []
+for i in range(len(school_names)):
+    name = school_names[i]
+    address = school_addresses[i]
+    total = total_enrollment_list[i]
+    male = male_enrollments[i]
+    female = female_enrollments[i]
+    #<br> makes a new line like \n
+    text = f"{name}<br>{address}<br>Total Enrollment: {total:,}<br>Male: {male:,}<br>Female: {female:,}"
+    hover_text.append(text)
+
+data = [
+    {
+        'type': 'scattergeo',
+        'lon': longitude_list,
+        'lat': latitude_list,
+        'text': hover_text,
+        'hoverinfo': 'text',
+        'marker': {
+            'size': [3 + .0002 * total_enrollment for total_enrollment in total_enrollment_list],
+            'color': total_enrollment_list,
+            'colorscale': 'Viridis',
+            'reversescale': True,
+            'colorbar': {'title': 'Enrollment'}
+        }
+    }
+]
+
+my_layout = Layout(title='Enrollment Information for Big 12 Universities')
+
+fig = {'data': data, 'layout': my_layout}
+
+offline.plot(fig, filename='schools_data.html')
